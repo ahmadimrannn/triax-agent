@@ -18,3 +18,11 @@ pydantic-settings
 
 fastapi
 uvicorn
+
+tokenizers 
+boto3 
+requests 
+python-multipart
+
+pypdf 
+python-docx
