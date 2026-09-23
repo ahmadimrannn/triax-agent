@@ -10,7 +10,7 @@ tokenizer = Tokenizer.from_pretrained(
 )
 tokenizer.no_truncation()
 
-@with_resilience
+@with_resilience()
 def chunk_text(text: str, chunk_size: int = 200, chunk_overlap: int = 40):
     encoding = tokenizer.encode(text, add_special_tokens=False)
     token_ids = encoding.ids
