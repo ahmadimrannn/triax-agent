@@ -31,6 +31,12 @@ def fetch_one(query: str, params: tuple = ()):
         with conn.cursor() as cur:
             cur.execute(query, params)
             return cur.fetchone()
+        
+def fetch_all(query: str, params: tuple = ()):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+            return cur.fetchall()
 
 def insert_and_return_id(query: str, params: tuple = ()):
     with get_db_connection() as conn:
