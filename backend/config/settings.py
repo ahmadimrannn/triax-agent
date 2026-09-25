@@ -1,5 +1,5 @@
 LLM_MODEL_NAME="gemini-3.5-flash-lite"
 MIN_CHUNK_SIZE = 50
 
-FALLBACK_CATEGORY = "other"
-FALLBACK_URGENCY = "low"
+TOP_K = 10
+MAX_DISTANCE = 0.7

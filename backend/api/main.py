@@ -76,7 +76,7 @@ async def upload_document(
             WHERE tenant_id = %s
               AND content_hash = %s
             """,
-            (str(tenant_id), content_hash),
+            (tenant_id, content_hash),
         )
 
         if existing:

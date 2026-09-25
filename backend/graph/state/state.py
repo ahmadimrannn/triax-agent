@@ -8,3 +8,5 @@ class AgentState(TypedDict):
     ticket_id: str
     category: str
     urgency: str
+
+    retrieved_results: list

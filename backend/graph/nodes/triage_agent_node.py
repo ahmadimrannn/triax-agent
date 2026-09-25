@@ -3,16 +3,12 @@ from config.llm import model
 from graph.schemas.schemas import TriageAgentSchema
 from graph.prompts.prompts import generate_triage_agent_prompt
 from tools.database.ticket_actions import write_ticket
-from langfuse import observe
-from langfuse_config.handler import langfuse
 import logging
 
 logger = logging.getLogger(__name__)
 
-
 triage_structured_llm = model.with_structured_output(TriageAgentSchema)
 
-@observe()
 async def triage_agent_node(state: AgentState):
     """
     Classifies an incoming support ticket using structured LLM output
@@ -30,10 +26,6 @@ async def triage_agent_node(state: AgentState):
         category = response.category
         urgency = response.urgency
     except Exception as e:
-        langfuse.update_current_span(
-            level="ERROR",
-            status_message=str(e),
-        )
         logger.exception(
             "Triage classification failed | tenant_id=%s",
             tenant_id,
@@ -51,10 +43,6 @@ async def triage_agent_node(state: AgentState):
         )
 
     except Exception as e:
-        langfuse.update_current_span(
-            level="ERROR",
-            status_message=str(e),
-        )
         logger.exception(
             "Failed to persist ticket | tenant_id=%s",
             tenant_id,
