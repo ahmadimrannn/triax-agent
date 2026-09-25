@@ -1,59 +1,205 @@
-from tokenizers import Tokenizer
+import re
+
 from dotenv import load_dotenv
-from config.settings import MIN_CHUNK_SIZE
+from tokenizers import Tokenizer
 
 load_dotenv()
+
 
 tokenizer = Tokenizer.from_pretrained(
     "sentence-transformers/all-MiniLM-L6-v2"
 )
 tokenizer.no_truncation()
 
-def chunk_text(text: str, chunk_size: int = 200, chunk_overlap: int = 40):
-    encoding = tokenizer.encode(text, add_special_tokens=False)
+
+# Matches:
+# 1. Refunds
+# 1.1 Refund Policy
+# # Refunds
+# ## Refund Policy
+SECTION_PATTERN = re.compile(
+    r"(?m)^(?P<heading>"
+    r"(?:\d+(?:\.\d+)*\.\s+.+)"
+    r"|(?:#{1,6}\s+.+)"
+    r")\s*$"
+)
+
+
+def split_sections(text: str) -> list[tuple[str, str]]:
+    """
+    Split a document into semantic sections using Markdown or
+    numbered headings.
+
+    Returns:
+        [
+            ("4. Refunds", "4. Refunds\n..."),
+            ("4.1 Refund After Cancellation", "4.1 ..."),
+            ...
+        ]
+    """
+
+    matches = list(SECTION_PATTERN.finditer(text))
+
+    if not matches:
+        cleaned = text.strip()
+        return [("", cleaned)] if cleaned else []
+
+    sections = []
+
+    # Content before the first heading.
+    if matches[0].start() > 0:
+        preamble = text[:matches[0].start()].strip()
+
+        if preamble:
+            sections.append(("", preamble))
+
+    # Each heading becomes its own semantic section.
+    for i, match in enumerate(matches):
+        heading = match.group("heading").strip()
+
+        start = match.start()
+
+        if i + 1 < len(matches):
+            end = matches[i + 1].start()
+        else:
+            end = len(text)
+
+        section_text = text[start:end].strip()
+
+        if section_text:
+            sections.append((heading, section_text))
+
+    return sections
+
+
+def token_chunk(
+    text: str,
+    chunk_size: int = 180,
+    chunk_overlap: int = 30,
+) -> list[str]:
+    """
+    Split one semantic section into token-based chunks.
+
+    Sections smaller than MIN_CHUNK_SIZE are preserved rather
+    than discarded.
+    """
+
+    encoding = tokenizer.encode(
+        text,
+        add_special_tokens=False,
+    )
+
     token_ids = encoding.ids
 
-    print("Total tokens:", len(token_ids))
-    if len(token_ids) < MIN_CHUNK_SIZE:
+    if not token_ids:
         return []
 
-    
+    # Never discard a small but meaningful semantic section.
+    if len(token_ids) <= chunk_size:
+        return [text.strip()]
+
     offsets = encoding.offsets
 
-    # First pass: just work out (start, end) token index pairs.
-    # No text slicing yet, so merging later is just adjusting numbers,
-    # not stitching strings back together.
-    boundaries = []
-    start = 0
-    while start < len(token_ids):
-        end = min(start + chunk_size, len(token_ids))
-        boundaries.append((start, end))
-        start += chunk_size - chunk_overlap
+    step = chunk_size - chunk_overlap
 
-    # If the last chunk is too small, and there's a previous chunk to
-    # merge it into, extend the previous chunk's end to cover it,
-    # then drop the last one from the list.
-    if len(boundaries) > 1:
-        last_start, last_end = boundaries[-1]
-        if (last_end - last_start) < MIN_CHUNK_SIZE:
-            prev_start, _ = boundaries[-2]
-            boundaries[-2] = (prev_start, last_end)
-            boundaries.pop()
+    if step <= 0:
+        raise ValueError(
+            "chunk_overlap must be smaller than chunk_size"
+        )
 
-    # Second pass: now build the real text for each finalized boundary,
-    # using character offsets from the original string.
     chunks = []
-    for i, (start, end) in enumerate(boundaries):
+
+    start = 0
+
+    while start < len(token_ids):
+        end = min(
+            start + chunk_size,
+            len(token_ids),
+        )
+
         char_start = offsets[start][0]
         char_end = offsets[end - 1][1]
-        chunk = text[char_start:char_end]
-        chunks.append(chunk)
-        print(f"Chunk {i + 1}: tokens {start}:{end}")
+
+        chunk = text[char_start:char_end].strip()
+
+        if chunk:
+            chunks.append(chunk)
+
+        if end >= len(token_ids):
+            break
+
+        start += step
 
     return chunks
 
-if __name__ == "__main__":
-    text = """Renewable energy has moved from a niche environmental concern to a central pillar of global economic strategy over the past two decades. Solar panel costs have fallen by more than ninety percent since 2010, driven"""
 
-    chunks = chunk_text(text)
-    print("Chunks:", chunks)
+def chunk_text(
+    text: str,
+    chunk_size: int = 180,
+    chunk_overlap: int = 30,
+) -> list[dict]:
+    """
+    Create retrieval-friendly chunks while preserving semantic
+    section boundaries.
+
+    Returns:
+        [
+            {
+                "text": "...",
+                "section": "4.1 Refund After Cancellation",
+                "chunk_index": 0,
+            },
+            ...
+        ]
+    """
+
+    text = text.strip()
+
+    if not text:
+        return []
+
+    sections = split_sections(text)
+
+    chunks = []
+
+    for section_heading, section_text in sections:
+
+        section_chunks = token_chunk(
+            section_text,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+
+        for chunk_index, chunk in enumerate(section_chunks):
+
+            # Include the heading in the embedded text so the
+            # embedding retains explicit topic context.
+            if section_heading:
+                embedding_text = (
+                    f"Section: {section_heading}\n\n"
+                    f"{chunk}"
+                )
+            else:
+                embedding_text = chunk
+
+            chunks.append(
+                {
+                    "text": embedding_text,
+                    "section": section_heading,
+                    "chunk_index": chunk_index,
+                }
+            )
+
+    print(f"Total sections: {len(sections)}")
+    print(f"Total chunks: {len(chunks)}")
+
+    for i, chunk in enumerate(chunks, start=1):
+        print(
+            f"\nChunk {i}"
+            f" | Section: {chunk['section']}"
+            f" | Index: {chunk['chunk_index']}"
+        )
+
+        print(chunk["text"][:300])
+
+    return chunks
