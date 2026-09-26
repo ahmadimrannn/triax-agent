@@ -9,3 +9,4 @@ wheels/
 # Virtual environments
 .venv
 backend/.env
+backend/test_retrieval_batch.py

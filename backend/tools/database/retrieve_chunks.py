@@ -51,7 +51,6 @@ if __name__ == "__main__":
 
             print("Length of retrieved chunks:", len(chunks))
             print("Retrieved Chunks:", chunks)
-
         finally:
             await close_db_pool()
 

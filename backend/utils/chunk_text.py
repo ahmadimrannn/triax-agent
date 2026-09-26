@@ -55,6 +55,7 @@ def split_sections(text: str) -> list[tuple[str, str]]:
         -
         *
         •
+        6. avoid promising a refund before verification   (numbered checklist item, not a heading)
     """
 
     if not text or not text.strip():
@@ -68,8 +69,13 @@ def split_sections(text: str) -> list[tuple[str, str]]:
         r"^\s*#{1,6}\s+(.+?)\s*$"
     )
 
+    # Trailing dot after the number group is now optional (\.? instead of \.),
+    # so "8.1 Request Limits" and "17.5 Webhook Failure" match correctly.
+    # Before this fix, only single-level numbers like "6." matched, which is
+    # why real subsections (8.1, 8.2, 4.1, 17.1-17.5, etc.) were never
+    # detected as headings and got merged into one oversized section.
     numbered_heading = re.compile(
-        r"^\s*(\d+(?:\.\d+)*\.)\s+(.+?)\s*$"
+        r"^\s*(\d+(?:\.\d+)*)\.?\s+(.+?)\s*$"
     )
 
     garbage_line = re.compile(
@@ -103,6 +109,10 @@ def split_sections(text: str) -> list[tuple[str, str]]:
 
         if match:
             title = match.group(2).strip()
+            first_letter = re.search(r"[A-Za-z]", title)
+
+            if first_letter and first_letter.group().islower():
+                return None
 
             # A numbered heading must contain actual words.
             if re.search(r"[A-Za-z]{2,}", title):
