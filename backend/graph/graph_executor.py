@@ -20,7 +20,7 @@ async def execute_graph(
     active_thread_id = thread_id or str(uuid.uuid4())
 
     initial_state = {
-        "tenant_id": str(tenant_id),
+        "tenant_id": tenant_id,
         "ticket_text": ticket_text,
         "ticket_id": "",
         "category": "",

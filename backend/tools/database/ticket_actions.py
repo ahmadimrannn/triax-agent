@@ -16,7 +16,7 @@ async def write_ticket(ticket_text: str, tenant_id: UUID, category: str, urgency
             """,
             (
                 ticket_text,
-                str(tenant_id),
+                tenant_id,
                 category,
                 urgency,
             ),
@@ -26,7 +26,7 @@ async def write_ticket(ticket_text: str, tenant_id: UUID, category: str, urgency
         logger.exception(
             "Failed to insert ticket in the database.",
             extra={
-                "tenant_id": str(tenant_id),
+                "tenant_id": tenant_id,
                 "category": category,
                 "urgency": urgency,
             },

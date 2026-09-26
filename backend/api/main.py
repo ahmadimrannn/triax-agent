@@ -103,7 +103,7 @@ async def upload_document(
             RETURNING id
             """,
             (
-                str(tenant_id),
+                tenant_id,
                 title,
                 r2_key,
                 content_hash,
@@ -126,7 +126,7 @@ async def upload_document(
                 VALUES (%s, %s, %s, %s, %s)
                 """,
                 (
-                    str(tenant_id),
+                    tenant_id,
                     document_id,
                     chunk_text_value,
                     embedding,
