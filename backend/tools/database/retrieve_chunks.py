@@ -32,7 +32,7 @@ async def retrieve_document_chunks(query: str, tenant_id: UUID):
 
     filtered_chunks = [
         chunk for chunk in chunks
-        # if chunk['distance'] <= MAX_DISTANCE
+        if chunk['distance'] <= MAX_DISTANCE
     ]
 
     return filtered_chunks
