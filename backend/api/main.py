@@ -116,7 +116,9 @@ async def upload_document(
 
         # Generate embeddings and store chunks.
         for chunk_index, chunk in enumerate(chunks):
-            embedding = await get_embeddings(chunk)
+            chunk_text_value = chunk['text']
+
+            embedding = await get_embeddings(chunk_text_value)
 
             await db_pool.execute(
                 """
@@ -126,7 +128,7 @@ async def upload_document(
                 (
                     str(tenant_id),
                     document_id,
-                    chunk,
+                    chunk_text_value,
                     embedding,
                     chunk_index,
                 ),
