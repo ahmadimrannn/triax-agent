@@ -13,7 +13,6 @@ load_dotenv()
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 _MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-
 _client = AsyncInferenceClient(
     provider="hf-inference",
     token=HF_TOKEN,
@@ -49,7 +48,7 @@ async def get_embeddings(chunk: str) -> list[float]:
 
     vector = vector / norm
 
-    return (vector / norm).tolist()
+    return vector.tolist()
 
 
 if __name__ == "__main__":
@@ -57,10 +56,9 @@ if __name__ == "__main__":
 
     async def main():
         chunk = "my name is ahmad"
-
         embeddings = await get_embeddings(chunk)
 
         print("Length of embeddings:", len(embeddings))
-        print(embeddings[:10])
+        print(embeddings)
 
     asyncio.run(main())
