@@ -23,8 +23,8 @@ async def execute_graph(
         "tenant_id": tenant_id,
         "ticket_text": ticket_text,
         "ticket_id": "",
-        "category": "",
-        "urgency": "",
+        "issues": [],
+        "retrieved_results": [],
     }
 
     config = {
@@ -43,16 +43,14 @@ async def execute_graph(
             stream_mode="values",
         ):
             ticket_id = state_snapshot.get("ticket_id")
-            category = state_snapshot.get("category")
-            urgency = state_snapshot.get("urgency")
+            issues = state_snapshot.get("issues")
 
             logger.info(
                 "Graph state | "
-                "tenant_id=%s ticket_id=%s category=%s urgency=%s",
+                "tenant_id=%s ticket_id=%s issues=%s",
                 tenant_id,
                 ticket_id,
-                category,
-                urgency,
+                issues,
             )
 
             final_state = state_snapshot
