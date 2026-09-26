@@ -10,33 +10,42 @@ async def retrieval_node(state: AgentState):
         Takes the ticket and category from triage and then retrieves the top k chunks from the database
     """
 
-    ticket_text = state.get("ticket_text")
-    category = state.get("category")
     tenant_id = state.get("tenant_id")
+    issues = state.get("issues")
 
-    query = f"Ticket Text: {ticket_text}, Category: {category}"
+    all_chunks = []
+    for issue in issues:
+        category = issue.get('category')
+        summary = issue.get("summary")
 
-    try:
-        retrieved_results = await retrieve_document_chunks(
-            query=query, 
-            tenant_id=UUID(tenant_id)
-        )
+        query = f"{summary}, Category: {category}"
 
-    except Exception as e:
-        logger.exception(
-            "Failed to retrieve results | tenant_id=%s",
+        try:
+            chunks = await retrieve_document_chunks(
+                query=query, 
+                tenant_id=UUID(tenant_id)
+            )
+
+        except Exception as e:
+            logger.exception(
+                "Failed to retrieve results | tenant_id=%s",
+                tenant_id,
+            )
+            raise RuntimeError(
+                "Failed to retrieve results."
+            ) from e
+
+        logger.info(
+            "Results Retrieved | tenant_id=%s query=%s",
             tenant_id,
+            query,
         )
-        raise RuntimeError(
-            "Failed to retrieve results."
-        ) from e
 
-    logger.info(
-        "Results Retrieved | tenant_id=%s query=%s",
-        tenant_id,
-        query,
-    )
+        for chunk in chunks:
+            chunk["source_category"] = category
+
+        all_chunks.extend(chunks)
 
     return {
-        "retrieved_results": retrieved_results
+        "retrieved_results": all_chunks
     }
