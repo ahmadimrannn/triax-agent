@@ -7,35 +7,45 @@ if sys.platform == "win32":
     )
 
 from uuid import UUID
+import logging
 
 from tools.db_pool import fetch_all, init_db_pool, close_db_pool
 from utils.get_embeddings import get_embeddings
 from config.settings import TOP_K, MAX_DISTANCE
+
+logger = logging.getLogger(__name__)
 
 async def retrieve_document_chunks(query: str, tenant_id: UUID):
     """
         Retrieve top k chunks from document_chunks from the database
     """
 
-    embedded_query = await get_embeddings(query)
+    try:
 
-    chunks = await fetch_all(
-        """
-            SELECT chunk_text, embedding <=> %s::vector AS distance
-            FROM document_chunks
-            WHERE embedding IS NOT NULL and tenant_id = %s
-            ORDER BY distance ASC
-            LIMIT %s
-        """,
-        (embedded_query, tenant_id, TOP_K)
-    )
+        embedded_query = await get_embeddings(query)
 
-    filtered_chunks = [
-        chunk for chunk in chunks
-        if chunk['distance'] <= MAX_DISTANCE
-    ]
+        chunks = await fetch_all(
+            """
+                SELECT id AS chunk_id, chunk_text, embedding <=> %s::vector AS distance
+                FROM document_chunks
+                WHERE embedding IS NOT NULL and tenant_id = %s
+                ORDER BY distance ASC
+                LIMIT %s
+            """,
+            (embedded_query, tenant_id, TOP_K)
+        )
 
-    return filtered_chunks
+        filtered_chunks = [
+            chunk for chunk in chunks
+            if chunk['distance'] <= MAX_DISTANCE
+        ]
+
+        return filtered_chunks
+    except Exception:
+        logger.exception(
+            "Failed to retrieve document chunks from the database.",
+        )
+        raise
 
 if __name__ == "__main__":
     async def main():

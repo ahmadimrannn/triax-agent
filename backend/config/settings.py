@@ -1,6 +1,7 @@
 import re
 
 LLM_MODEL_NAME="gemini-3.5-flash-lite"
+GEMINI_RPM = 15
 MIN_CHUNK_SIZE = 50
 
 URGENCY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}

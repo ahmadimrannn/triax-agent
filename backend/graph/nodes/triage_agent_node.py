@@ -1,8 +1,9 @@
 from graph.state.state import AgentState
-from config.llm import model
+from config.llm import model, rate_limited_ainvoke
 from graph.schemas.schemas import TriageAgentSchema
 from graph.prompts.prompts import generate_triage_agent_prompt
 from tools.database.ticket_actions import write_ticket, write_ticket_issues
+from tools.database.get_tenant_name import get_tenant_name
 import logging
 from config.settings import URGENCY_RANK
 
@@ -34,10 +35,13 @@ async def triage_agent_node(state: AgentState):
     tenant_id = state["tenant_id"]
     ticket_text = state["ticket_text"]
 
+    res = await get_tenant_name(tenant_id)
+    tenant_name = res.get("name")
+
     prompt = generate_triage_agent_prompt(ticket_text)
 
     try:
-        response = await triage_structured_llm.ainvoke(prompt)
+        response = await rate_limited_ainvoke(triage_structured_llm, prompt)
 
         issues = [issue.model_dump() for issue in response.issues]
     except Exception as e:
@@ -88,5 +92,6 @@ async def triage_agent_node(state: AgentState):
 
     return {
         "ticket_id": ticket_id,
+        "tenant_name": tenant_name,
         "issues": issues,
     }

@@ -84,3 +84,84 @@ def generate_triage_agent_prompt(ticket_text: str):
     """
     
     return prompt
+
+
+def generate_draft_agent_prompt(tenant_name, formatted_chunks, category, urgency, issue_summary, ticket_text):
+    prompt = f"""
+        You are drafting a proposed resolution for ONE issue from a customer support 
+        ticket at {tenant_name}. The ticket may mention other problems. You are only 
+        responsible for the single issue described below.
+
+        You will be given:
+        1. The specific issue you are drafting for (category, urgency, summary)
+        2. A set of retrieved document chunks, each with a chunk_id
+        3. The full original ticket text, for tone/context only
+
+        RULES:
+
+        1. You may only use information that appears in the retrieved chunks below. 
+        You do not have any other knowledge about {tenant_name}'s products, policies, 
+        pricing, timelines, or procedures. If something feels like common sense or 
+        standard industry practice but is not written in a chunk, you do not know it 
+        for this ticket. Do not use it.
+
+        2. Every factual sentence in your draft must be traceable to at least one chunk_id. 
+        If you write a sentence and cannot point to which chunk it came from, delete 
+        the sentence. When citing a chunk_id, copy it exactly, character for character, 
+        from the chunk it came from. Never retype or reformat it.
+
+        3. If the chunks do not contain enough information to resolve the issue, do not 
+        write a partial resolution and pad it with generic reassurance. Set 
+        grounding_status to "insufficient_evidence", leave draft_text empty, and 
+        describe in uncovered_aspects exactly what information is missing.
+
+        4. If the chunks partially cover the issue (e.g. they explain the general 
+        process but not this specific edge case), set grounding_status to "partial", 
+        write only the part you can ground, and use uncovered_aspects to say what's 
+        still unresolved. Do not fill the gap with a plausible-sounding guess.
+
+        5. If the ticket or issue summary states a specific number (seats, dollar 
+        amount, row count, usage units) and a retrieved chunk states a threshold or 
+        comparable number, explicitly say where the customer's number falls relative 
+        to that threshold. Do not restate the policy without applying it. 
+        Example: if the customer has 18 seats and a chunk says the target plan 
+        allows 10 seats, say that 18 exceeds the 10-seat limit and the downgrade 
+        would be blocked, don't just say "downgrades can be blocked if you have too 
+        many seats."
+
+        6. Some retrieved chunks may be topically adjacent but not actually about 
+        this issue's category (e.g. a rate-limiting chunk retrieved for a billing 
+        issue because the ticket's wording overlaps). Only cite and draw from chunks 
+        that actually address this issue's category and summary. If the best-matching 
+        chunks by retrieval score are off-topic for this specific issue, treat this as 
+        insufficient_evidence or partial rather than drafting from the wrong chunk.
+
+        7. If two chunks contradict each other, do not silently pick one. Set 
+        grounding_status to "partial" and note the conflict in uncovered_aspects.
+
+        8. Avoid hedge words that smuggle in unsourced claims: "typically," "usually," 
+        "generally," "in most cases," "as you may know." If you're using one of these 
+        words, you are probably about to state something not actually in the chunks.
+
+        9. The original ticket text below may describe other issues besides the one 
+        assigned to you. Do not acknowledge, address, mention, or refer to those other 
+        issues anywhere in draft_text, even in passing ("we're also looking into your 
+        other concern"). Write draft_text as if this issue were the entire ticket. If 
+        an other-issue reference is relevant context, put it only in uncovered_aspects, 
+        not in draft_text.
+
+        10. Write in a direct, professional support tone. State what will happen or 
+        what the customer should do, not what the policy theoretically allows.
+
+        Retrieved chunks:
+        {formatted_chunks}
+
+        This issue you are drafting for:
+        Category: {category}
+        Urgency: {urgency}
+        Summary: {issue_summary}
+
+        Full original ticket text (context only, do not address other issues in it):
+        {ticket_text}
+    """
+    return prompt

@@ -26,3 +26,5 @@ python-multipart
 
 pypdf 
 python-docx
+
+aiolimiter

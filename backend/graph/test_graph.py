@@ -11,7 +11,7 @@ async def main():
     result = await execute_graph(
         graph=graph,
         ticket_text="I was charged twice for my subscription.",
-        tenant_id=UUID("e988b45c-2a34-450f-964d-5f0afd0ed33f"),
+        tenant_id=UUID("ea452427-2c68-45a1-92f1-d7515e5d207f"),
     )
 
     print("\nFINAL STATE:")

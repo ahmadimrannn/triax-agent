@@ -17,3 +17,9 @@ class TriageAgentSchema(BaseModel):
     issues: list[TicketIssue] = Field(
         description="One entry per distinct problem in the ticket. Most tickets have exactly one issue. Only split into multiple entries when the ticket describes genuinely separate problems, not just multiple details about the same problem."
     )
+
+class DraftedAgentResolution(BaseModel):
+    grounding_status: Literal["grounded", "partial", "insufficient_evidence"]
+    draft_text: str
+    citations: list[str]
+    uncovered_aspects: str

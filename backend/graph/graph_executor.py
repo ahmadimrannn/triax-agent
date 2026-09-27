@@ -22,9 +22,13 @@ async def execute_graph(
     initial_state = {
         "tenant_id": tenant_id,
         "ticket_text": ticket_text,
+
         "ticket_id": "",
+        "tenant_name": "",
         "issues": [],
+        
         "retrieved_results": [],
+        "draft_results": [],
     }
 
     config = {
