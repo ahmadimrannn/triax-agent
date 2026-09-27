@@ -12,6 +12,7 @@ langchain-core
 langfuse
 
 resend
+redis
 
 pydantic
 pydantic-settings

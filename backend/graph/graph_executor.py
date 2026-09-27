@@ -5,7 +5,7 @@ from uuid import UUID
 
 from langgraph.graph.state import CompiledStateGraph
 
-from langfuse_config.handler import langfuse_handler
+from config.langfuse_config.handler import langfuse_handler
 
 logger = logging.getLogger(__name__)
 
