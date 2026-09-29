@@ -29,6 +29,8 @@ async def execute_graph(
         
         "retrieved_results": [],
         "draft_results": [],
+
+        "gate_decision": {}
     }
 
     config = {

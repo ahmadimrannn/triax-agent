@@ -1,11 +1,13 @@
-# tools/database/create_proposal.py
 import logging
 from psycopg.types.json import Json
+from utils.resilience import with_resilience
 
 from tools.db_pool import execute
+
 logger = logging.getLogger(__name__)
 
 
+with_resilience()
 async def upsert_draft_proposal(
     tenant_id,
     ticket_id,

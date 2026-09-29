@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import TypedDict, Literal
 from uuid import UUID
 
 class TicketIssues(TypedDict):
@@ -11,6 +11,12 @@ class RetrievedChunk(TypedDict):
     chunk_text: str
     distance: float
 
+class GateDecision(TypedDict):
+    route: Literal["auto_send", "human_review"]
+    reasons: list[str]
+    ticket_score: float | None
+    threshold: float
+
 class AgentState(TypedDict):
     tenant_id: UUID
     ticket_text: str
@@ -21,3 +27,5 @@ class AgentState(TypedDict):
     
     retrieved_results: dict[str, list[RetrievedChunk]]
     draft_results: list[dict]
+
+    gate_decision: dict[GateDecision]

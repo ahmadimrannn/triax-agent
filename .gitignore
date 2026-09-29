@@ -10,3 +10,4 @@ wheels/
 .venv
 backend/.env
 backend/test_api.py
+backend/test_gate.py

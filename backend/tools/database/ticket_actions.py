@@ -2,10 +2,12 @@ import logging
 from uuid import UUID
 
 from tools.db_pool import insert_and_return_id, execute
+from utils.resilience import with_resilience
 
 logger = logging.getLogger(__name__)
 
 
+@with_resilience()
 async def write_ticket(ticket_text: str, tenant_id: UUID, category: str, urgency: str):
     try:
         return await insert_and_return_id(

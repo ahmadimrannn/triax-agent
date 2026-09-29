@@ -7,7 +7,7 @@ MIN_CHUNK_SIZE = 50
 URGENCY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
 TOP_K = 5
-MAX_DISTANCE = 0.7
+MAX_DISTANCE = 1.0
 
 # Obvious PDF extraction artifacts:
 GARBAGE_ONLY_PATTERN = re.compile(

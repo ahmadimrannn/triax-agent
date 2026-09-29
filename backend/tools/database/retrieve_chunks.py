@@ -10,11 +10,13 @@ from uuid import UUID
 import logging
 
 from tools.db_pool import fetch_all, init_db_pool, close_db_pool
+from utils.resilience import with_resilience
 from utils.get_embeddings import get_embeddings
 from config.settings import TOP_K, MAX_DISTANCE
 
 logger = logging.getLogger(__name__)
 
+@with_resilience()
 async def retrieve_document_chunks(query: str, tenant_id: UUID):
     """
         Retrieve top k chunks from document_chunks from the database

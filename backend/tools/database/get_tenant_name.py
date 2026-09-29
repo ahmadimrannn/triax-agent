@@ -2,9 +2,12 @@ from uuid import UUID
 import logging
 
 from tools.db_pool import fetch_one
+from utils.resilience import with_resilience
+
 
 logger = logging.getLogger(__name__)
 
+@with_resilience()
 async def get_tenant_name(tenant_id: UUID):
     """ 
         Retrieves the tenant name using tenant_id
