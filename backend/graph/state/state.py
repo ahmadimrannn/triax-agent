@@ -29,3 +29,6 @@ class AgentState(TypedDict):
     draft_results: list[dict]
 
     gate_decision: dict[GateDecision]
+
+    auto_send_reason: str
+    human_review_reason: str

@@ -1,10 +1,30 @@
+import hashlib
+import json
 from dataclasses import dataclass
-from graph.state.state import GateDecision
+from typing import Literal, TypedDict
+
 
 @dataclass(frozen=True)
 class GateConfig:
     auto_send_max_distance: float = 0.50
     never_auto_send_categories: frozenset = frozenset({"billing", "security"})
+
+
+class GateDecision(TypedDict):
+    route: Literal["auto_send", "human_review"]
+    reasons: list[str]
+    ticket_score: float | None
+    threshold: float
+    draft_hash: str
+
+
+class GateBypassError(Exception):
+    pass
+
+
+def draft_fingerprint(draft_results):
+    parts = sorted((str(d["issue_id"]), d["draft_text"]) for d in (draft_results or []))
+    return hashlib.sha256(json.dumps(parts).encode("utf-8")).hexdigest()
 
 
 def _check_issue(key, issue, chunks, draft, config):
@@ -74,6 +94,7 @@ def decide(issues, retrieved_results, draft_results, config=GateConfig()) -> Gat
         "reasons": reasons,
         "ticket_score": max(scores) if scores else None,
         "threshold": config.auto_send_max_distance,
+        "draft_hash": draft_fingerprint(draft_results),
     }
 
 
@@ -86,4 +107,36 @@ def run_gate(issues, retrieved_results, draft_results, config=GateConfig()) -> G
             "reasons": [f"gate_error: {type(e).__name__}: {e}"],
             "ticket_score": None,
             "threshold": config.auto_send_max_distance,
+            "draft_hash": "",
         }
+
+
+def gate_node(state):
+    decision = run_gate(
+        state.get("issues") or [],
+        state.get("retrieved_results") or {},
+        state.get("draft_results"),
+    )
+    return {"gate_decision": decision}
+
+
+def route_after_gate(state):
+    decision = state.get("gate_decision")
+    if isinstance(decision, dict) and decision.get("route") == "auto_send":
+        return "auto_send"
+    return "human_review"
+
+
+def verify_approval(state):
+    decision = state.get("gate_decision")
+    if not isinstance(decision, dict) or decision.get("route") != "auto_send":
+        raise GateBypassError("auto_send was reached without an auto_send decision from the gate")
+    if decision.get("reasons"):
+        raise GateBypassError("gate decision says auto_send but still lists review reasons")
+    try:
+        current_hash = draft_fingerprint(state.get("draft_results"))
+    except Exception as e:
+        raise GateBypassError(f"could not fingerprint the drafts: {e!r}") from e
+    if decision.get("draft_hash") != current_hash:
+        raise GateBypassError("the drafts changed after the gate approved them")
+    return decision

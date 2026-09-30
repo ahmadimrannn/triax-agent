@@ -7,7 +7,7 @@ from tools.db_pool import execute
 logger = logging.getLogger(__name__)
 
 
-with_resilience()
+@with_resilience()
 async def upsert_draft_proposal(
     tenant_id,
     ticket_id,

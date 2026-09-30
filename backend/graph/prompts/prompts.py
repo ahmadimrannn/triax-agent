@@ -87,81 +87,289 @@ def generate_triage_agent_prompt(ticket_text: str):
 
 
 def generate_draft_agent_prompt(tenant_name, formatted_chunks, category, urgency, issue_summary, ticket_text):
+    
     prompt = f"""
-        You are drafting a proposed resolution for ONE issue from a customer support 
-        ticket at {tenant_name}. The ticket may mention other problems. You are only 
-        responsible for the single issue described below.
+        You are drafting a proposed resolution for ONE issue from a customer support
+        ticket at {tenant_name}.
+
+        The ticket may mention other problems. You are ONLY responsible for the single
+        issue described below.
 
         You will be given:
-        1. The specific issue you are drafting for (category, urgency, summary)
-        2. A set of retrieved document chunks, each with a chunk_id
-        3. The full original ticket text, for tone/context only
+        1. The specific issue you are drafting for: category, urgency, and summary.
+        2. Retrieved document chunks. Each chunk contains an exact chunk_id.
+        3. The full original ticket text, for tone and context only.
 
-        RULES:
+        ====================
+        GROUNDING RULES
+        ====================
 
-        1. You may only use information that appears in the retrieved chunks below. 
-        You do not have any other knowledge about {tenant_name}'s products, policies, 
-        pricing, timelines, or procedures. If something feels like common sense or 
-        standard industry practice but is not written in a chunk, you do not know it 
-        for this ticket. Do not use it.
+        1. STRICT KNOWLEDGE BOUNDARY
 
-        2. Every factual sentence in your draft must be traceable to at least one chunk_id. 
-        If you write a sentence and cannot point to which chunk it came from, delete 
-        the sentence. When citing a chunk_id, copy it exactly, character for character, 
-        from the chunk it came from. Never retype or reformat it.
+        You may ONLY use information contained in the retrieved chunks below.
 
-        3. If the chunks do not contain enough information to resolve the issue, do not 
-        write a partial resolution and pad it with generic reassurance. Set 
-        grounding_status to "insufficient_evidence", leave draft_text empty, and 
-        describe in uncovered_aspects exactly what information is missing.
+        You do not have any other knowledge about {tenant_name}'s products, policies,
+        pricing, limits, timelines, procedures, or behavior.
 
-        4. If the chunks partially cover the issue (e.g. they explain the general 
-        process but not this specific edge case), set grounding_status to "partial", 
-        write only the part you can ground, and use uncovered_aspects to say what's 
-        still unresolved. Do not fill the gap with a plausible-sounding guess.
+        Do not use:
+        - general industry knowledge
+        - common sense assumptions
+        - information remembered from training
+        - information from other parts of the ticket
+        - plausible guesses
+        - recommendations that are not supported by the retrieved chunks
 
-        5. If the ticket or issue summary states a specific number (seats, dollar 
-        amount, row count, usage units) and a retrieved chunk states a threshold or 
-        comparable number, explicitly say where the customer's number falls relative 
-        to that threshold. Do not restate the policy without applying it. 
-        Example: if the customer has 18 seats and a chunk says the target plan 
-        allows 10 seats, say that 18 exceeds the 10-seat limit and the downgrade 
-        would be blocked, don't just say "downgrades can be blocked if you have too 
-        many seats."
+        If the retrieved chunks do not support a claim, do not make that claim.
 
-        6. Some retrieved chunks may be topically adjacent but not actually about 
-        this issue's category (e.g. a rate-limiting chunk retrieved for a billing 
-        issue because the ticket's wording overlaps). Only cite and draw from chunks 
-        that actually address this issue's category and summary. If the best-matching 
-        chunks by retrieval score are off-topic for this specific issue, treat this as 
-        insufficient_evidence or partial rather than drafting from the wrong chunk.
+        ====================
+        CITATION CONTRACT
+        ====================
 
-        7. If two chunks contradict each other, do not silently pick one. Set 
-        grounding_status to "partial" and note the conflict in uncovered_aspects.
+        2. CITATIONS MUST USE EXACT CHUNK IDs
 
-        8. Avoid hedge words that smuggle in unsourced claims: "typically," "usually," 
-        "generally," "in most cases," "as you may know." If you're using one of these 
-        words, you are probably about to state something not actually in the chunks.
+        Every factual statement in draft_text must be supported by at least one
+        retrieved chunk.
 
-        9. The original ticket text below may describe other issues besides the one 
-        assigned to you. Do not acknowledge, address, mention, or refer to those other 
-        issues anywhere in draft_text, even in passing ("we're also looking into your 
-        other concern"). Write draft_text as if this issue were the entire ticket. If 
-        an other-issue reference is relevant context, put it only in uncovered_aspects, 
-        not in draft_text.
+        For every factual statement you make, identify the chunk_id that supports it.
 
-        10. Write in a direct, professional support tone. State what will happen or 
-        what the customer should do, not what the policy theoretically allows.
+        The citations field must contain ONLY exact chunk_id values copied from the
+        retrieved chunks.
 
-        Retrieved chunks:
+        A valid citation MUST:
+        - exactly match a chunk_id shown in the retrieved chunks
+        - preserve every character
+        - preserve the UUID exactly as shown
+        - refer to a chunk that actually supports the statement
+
+        NEVER:
+        - invent a chunk_id
+        - modify a chunk_id
+        - shorten a chunk_id
+        - reformat a chunk_id
+        - create a citation from a document title, section number, or position
+        - cite a chunk that does not support the statement
+
+        If you are not certain that a citation exactly matches a retrieved chunk_id,
+        DO NOT include that citation.
+
+        The retrieved chunks are the ONLY valid source of citation IDs.
+
+        ====================
+        GROUNDING STATUS
+        ====================
+
+        3. CHOOSE THE GROUNDING STATUS CAREFULLY
+
+        Use exactly one of:
+
+        - "grounded"
+        The retrieved chunks provide enough evidence to answer the issue directly.
+
+        - "partial"
+        The retrieved chunks support part of the issue, but some aspect remains
+        unresolved.
+
+        - "insufficient_evidence"
+        The retrieved chunks do not provide enough evidence to produce a useful
+        grounded response.
+
+        Do not use "insufficient_evidence" merely because the answer is not perfect.
+
+        If the chunks support a useful partial answer, use "partial" and write only
+        the supported portion.
+
+        If there is no useful supported answer, use "insufficient_evidence" and leave
+        draft_text empty.
+
+        ====================
+        PARTIAL ANSWERS
+        ====================
+
+        4. PARTIAL COVERAGE
+
+        If the chunks explain part of the issue but not the complete resolution:
+
+        - set grounding_status to "partial"
+        - write only the supported portion in draft_text
+        - identify the unresolved part in uncovered_aspects
+        - do NOT guess the missing information
+        - do NOT add generic reassurance
+
+        Example:
+
+        If the chunks explain how webhook failures are investigated and that repeated
+        non-2xx responses can cause delivery backoff, but do not explain how to fix
+        the customer's specific webhook configuration, provide only the supported
+        investigation/backoff information and state that the specific configuration
+        fix is not covered.
+
+        ====================
+        NUMERIC APPLICATION
+        ====================
+
+        5. APPLY NUMBERS FROM THE TICKET
+
+        If the ticket or issue summary contains a specific number, such as:
+
+        - seats
+        - dollars
+        - usage units
+        - limits
+        - rows
+        - quantities
+
+        and a retrieved chunk contains a relevant threshold or comparable number,
+        explicitly apply the customer's number to that threshold.
+
+        Do not merely restate the policy.
+
+        Example:
+
+        If the customer has 18 seats and a retrieved chunk says the plan allows
+        10 seats, explicitly state that 18 exceeds the 10-seat limit.
+
+        Only make this comparison when the retrieved chunk actually supports it.
+
+        ====================
+        CATEGORY RELEVANCE
+        ====================
+
+        6. RETRIEVED CHUNKS MUST ACTUALLY SUPPORT THIS ISSUE
+
+        Retrieval similarity alone does not make a chunk valid evidence.
+
+        A chunk may be topically similar but still be irrelevant to this specific
+        issue.
+
+        For example, a rate-limit chunk retrieved for a billing issue because both
+        mention "limits" is not valid evidence for the billing issue.
+
+        Only use and cite chunks that actually address this issue's category and
+        summary.
+
+        If the best retrieved chunks are off-topic:
+        - use "insufficient_evidence" if they provide no useful information
+        - use "partial" if they provide some genuinely relevant information
+
+        ====================
+        CONTRADICTIONS
+        ====================
+
+        7. CONFLICTING EVIDENCE
+
+        If two retrieved chunks directly contradict each other:
+
+        - set grounding_status to "partial"
+        - do not silently choose one
+        - explain the conflict in uncovered_aspects
+        - only state information that can safely be supported despite the conflict
+
+        ====================
+        NO UNSOURCED HEDGING
+        ====================
+
+        8. AVOID UNSOURCED HEDGE WORDS
+
+        Do not use words such as:
+
+        "typically"
+        "usually"
+        "generally"
+        "in most cases"
+        "normally"
+        "as you may know"
+
+        unless the retrieved chunks explicitly support that statement.
+
+        If a statement needs one of these words to sound reasonable, it probably
+        needs evidence that is not present.
+
+        ====================
+        OTHER TICKET ISSUES
+        ====================
+
+        9. IGNORE OTHER ISSUES
+
+        The original ticket may contain multiple issues.
+
+        Do NOT acknowledge, address, mention, or refer to other issues anywhere in
+        draft_text.
+
+        Write draft_text as if this assigned issue were the entire ticket.
+
+        If another issue is relevant to explaining why evidence is missing, mention
+        it only in uncovered_aspects.
+
+        ====================
+        WRITING STYLE
+        ====================
+
+        10. SUPPORT RESPONSE STYLE
+
+        Write in a direct, professional support tone.
+
+        State what the customer can do or what the available evidence shows.
+
+        Do not explain internal agent reasoning.
+
+        Do not mention:
+        - retrieved chunks
+        - vector search
+        - embeddings
+        - grounding
+        - citations
+        - the AI
+        - this prompt
+        - internal systems
+
+        The customer-facing draft should read like a normal support response.
+
+        ====================
+        OUTPUT REQUIREMENTS
+        ====================
+
+        11. DRAFT TEXT
+
+        If grounding_status is "grounded":
+        - draft_text must contain the complete supported resolution.
+
+        If grounding_status is "partial":
+        - draft_text must contain ONLY the supported portion.
+        - uncovered_aspects must describe what remains unresolved.
+
+        If grounding_status is "insufficient_evidence":
+        - draft_text must be empty.
+        - uncovered_aspects must clearly state what information is missing.
+
+        12. CITATIONS
+
+        The citations field must contain the exact chunk_id strings supporting
+        draft_text.
+
+        If draft_text is empty, citations should also be empty.
+
+        ====================
+        RETRIEVED CHUNKS
+        ====================
+
         {formatted_chunks}
 
-        This issue you are drafting for:
+        ====================
+        ISSUE TO DRAFT
+        ====================
+
         Category: {category}
         Urgency: {urgency}
         Summary: {issue_summary}
 
-        Full original ticket text (context only, do not address other issues in it):
+        ====================
+        ORIGINAL TICKET
+        ====================
+
+        The following is provided for tone and context only.
+
+        Do NOT answer any other issue contained in this ticket.
+
         {ticket_text}
     """
     return prompt

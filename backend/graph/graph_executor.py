@@ -27,7 +27,7 @@ async def execute_graph(
         "tenant_name": "",
         "issues": [],
         
-        "retrieved_results": [],
+        "retrieved_results": {},
         "draft_results": [],
 
         "gate_decision": {}
