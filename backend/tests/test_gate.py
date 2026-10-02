@@ -1,5 +1,7 @@
 from graph import gate
 
+import uuid
+
 GateConfig = gate.GateConfig
 GateBypassError = gate.GateBypassError
 decide = gate.decide
@@ -208,6 +210,59 @@ def test_real_a7_draft_shape_is_held_only_because_security_is_always_reviewed():
     no_rule = GateConfig(never_auto_send_categories=frozenset())
     sent = run_gate([{"category": "security", "urgency": "high", "summary": "s"}], chunks, drafts, no_rule)
     assert sent["route"] == "auto_send"
+
+
+REAL_ID = "704d132c-4570-4e28-97e3-e16bfced0093"
+
+
+def test_uuid_objects_from_postgres_match_string_citations():
+    issues = [issue()]
+    chunks = {"0": [{"chunk_id": uuid.UUID(REAL_ID), "chunk_text": "t", "distance": 0.15}]}
+    drafts = [draft(cites=(REAL_ID,))]
+    result = run_gate(issues, chunks, drafts)
+    assert result["route"] == "auto_send", result["reasons"]
+    assert result["ticket_score"] == 0.15
+
+
+def test_uuid_citations_match_string_chunk_ids():
+    issues = [issue()]
+    chunks = {"0": [{"chunk_id": REAL_ID, "chunk_text": "t", "distance": 0.15}]}
+    drafts = [draft(cites=(uuid.UUID(REAL_ID),))]
+    assert run_gate(issues, chunks, drafts)["route"] == "auto_send"
+
+
+def test_a_different_uuid_is_still_not_a_match():
+    issues = [issue()]
+    chunks = {"0": [{"chunk_id": uuid.UUID(REAL_ID), "chunk_text": "t", "distance": 0.15}]}
+    drafts = [draft(cites=("704d132c-4570-4e28-97e3-e16bfced0099",))]
+    result = run_gate(issues, chunks, drafts)
+    assert result["route"] == "human_review"
+    assert any("not retrieved" in r for r in result["reasons"])
+
+
+def test_failed_draft_from_the_draft_node_is_reviewed_with_a_clear_reason():
+    failed = {
+        "issue_id": "0", "category": "usage", "status": "failed", "grounding_status": None,
+        "draft_text": None, "citations": [], "uncovered_aspects": None,
+        "error_type": "ToolExecutionError", "error": "timed out",
+    }
+    issues, chunks, _ = good_ticket()
+    result = run_gate(issues, chunks, [failed])
+    assert result["route"] == "human_review"
+    assert result["reasons"] == ["issue 0: draft status 'failed'"]
+
+
+def test_raw_chunk_id_inside_the_draft_text_goes_to_review():
+    issues, chunks, _ = good_ticket()
+    leaky = draft(text=f"Please send the event id [{REAL_ID}].")
+    result = run_gate(issues, chunks, [leaky])
+    assert result["route"] == "human_review"
+    assert any("raw chunk id" in r for r in result["reasons"])
+
+
+def test_none_for_uncovered_aspects_counts_as_nothing_uncovered():
+    issues, chunks, _ = good_ticket()
+    assert run_gate(issues, chunks, [draft(uncovered=None)])["route"] == "auto_send"
 
 
 def approved_state(distance=0.15):

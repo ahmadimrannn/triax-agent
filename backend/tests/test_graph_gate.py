@@ -4,32 +4,32 @@ import sys
 import uuid
 from pathlib import Path
 
-# Fix: Set ROOT to the backend root directory (parent of tests/)
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
 
 NEEDLE = "def " + "build_graph"
 
 
 def find_builder_module():
     for path in ROOT.rglob("*.py"):
-        # Exclude virtual environments, caches, tests, and the file itself
-        if any(part in path.parts for part in (".venv", "venv", "__pycache__", "tests")):
+        if ".venv" in path.parts or "__pycache__" in path.parts or path.resolve() == Path(__file__).resolve():
             continue
         try:
             text = path.read_text(encoding="utf-8")
         except Exception:
             continue
         if NEEDLE in text and "StateGraph" in text:
-            # Convert relative path (e.g., graph/builder.py) to module notation (graph.builder)
             return ".".join(path.relative_to(ROOT).with_suffix("").parts)
-            
     raise RuntimeError("could not find the file that defines build_graph")
 
 
-def fake_nodes(distance=0.15, grounding="grounded", category="usage", break_draft=False):
+REAL_ID = "704d132c-4570-4e28-97e3-e16bfced0093"
+
+
+def fake_nodes(distance=0.15, grounding="grounded", category="usage", break_draft=False, uuid_chunk_ids=False):
     good = grounding == "grounded"
+    chunk_id = uuid.UUID(REAL_ID) if uuid_chunk_ids else "c1"
+    cited = REAL_ID if uuid_chunk_ids else "c1"
 
     async def triage(state):
         return {
@@ -39,7 +39,7 @@ def fake_nodes(distance=0.15, grounding="grounded", category="usage", break_draf
         }
 
     async def retrieval(state):
-        return {"retrieved_results": {"0": [{"chunk_id": "c1", "chunk_text": "t", "distance": distance}]}}
+        return {"retrieved_results": {"0": [{"chunk_id": chunk_id, "chunk_text": "t", "distance": distance}]}}
 
     async def draft(state):
         item = {
@@ -48,7 +48,7 @@ def fake_nodes(distance=0.15, grounding="grounded", category="usage", break_draf
             "status": "ok",
             "grounding_status": grounding,
             "draft_text": "Here is the answer." if good else "",
-            "citations": ["c1"] if good else [],
+            "citations": [cited] if good else [],
             "uncovered_aspects": "" if good else "the KB does not cover this",
         }
         if break_draft:
@@ -97,6 +97,12 @@ def test_low_confidence_ticket_reaches_human_review_through_the_real_graph():
     assert "human_review_reason" in final
     assert "auto_send_reason" not in final
     assert "worst cited distance" in final["human_review_reason"]
+
+
+def test_postgres_style_uuid_chunk_ids_do_not_break_auto_send():
+    final = run_ticket(fake_nodes(distance=0.15, uuid_chunk_ids=True))
+    assert final["gate_decision"]["route"] == "auto_send", final["gate_decision"]["reasons"]
+    assert "auto_send_reason" in final
 
 
 def test_partial_grounding_reaches_human_review():

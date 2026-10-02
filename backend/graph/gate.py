@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from typing import Literal, TypedDict
 
@@ -8,6 +9,11 @@ from typing import Literal, TypedDict
 class GateConfig:
     auto_send_max_distance: float = 0.50
     never_auto_send_categories: frozenset = frozenset({"billing", "security"})
+
+
+UUID_PATTERN = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
 
 
 class GateDecision(TypedDict):
@@ -39,22 +45,28 @@ def _check_issue(key, issue, chunks, draft, config):
         reasons.append(f"{tag}: no draft")
         return reasons, score
 
-    if draft["category"] != issue["category"]:
-        reasons.append(f"{tag}: draft category '{draft['category']}' differs from triage category '{issue['category']}'")
     if draft["status"] != "ok":
         reasons.append(f"{tag}: draft status '{draft['status']}'")
+        return reasons, score
+
+    if draft["category"] != issue["category"]:
+        reasons.append(f"{tag}: draft category '{draft['category']}' differs from triage category '{issue['category']}'")
     if draft["grounding_status"] != "grounded":
         reasons.append(f"{tag}: grounding '{draft['grounding_status']}'")
-    if draft["uncovered_aspects"].strip():
+    if (draft["uncovered_aspects"] or "").strip():
         reasons.append(f"{tag}: has uncovered aspects")
-    if not draft["draft_text"].strip():
-        reasons.append(f"{tag}: empty draft text")
 
-    cited = draft["citations"]
+    text = draft["draft_text"] or ""
+    if not text.strip():
+        reasons.append(f"{tag}: empty draft text")
+    if UUID_PATTERN.search(text):
+        reasons.append(f"{tag}: draft text contains a raw chunk id")
+
+    cited = [str(c) for c in (draft["citations"] or [])]
     if not cited:
         reasons.append(f"{tag}: no citations")
 
-    distance_by_id = {c["chunk_id"]: c["distance"] for c in chunks}
+    distance_by_id = {str(c["chunk_id"]): c["distance"] for c in chunks}
     if not distance_by_id:
         reasons.append(f"{tag}: no retrieved chunks")
     if any(c not in distance_by_id for c in cited):

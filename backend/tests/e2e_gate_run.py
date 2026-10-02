@@ -47,7 +47,7 @@ MUST_NEVER_AUTO_SEND = {"uncovered", "multi"}
 
 def failed(ticket_id, label, message):
     return {"ticket": ticket_id, "label": label, "route": "FAILED", "reasons": [], "score": None,
-            "error": message, "mismatch": False}
+            "error": message, "mismatch": False, "drafts": [], "retrieved": {}}
 
 
 async def run_one(client, gate, ticket):
@@ -68,7 +68,8 @@ async def run_one(client, gate, ticket):
         mismatch = not ((route == "auto_send" and ran_auto_send and not ran_review) or
                         (route == "human_review" and ran_review and not ran_auto_send))
         return {"ticket": ticket_id, "label": label, "route": route, "reasons": decision["reasons"],
-                "score": decision.get("ticket_score"), "error": "", "mismatch": mismatch}
+                "score": decision.get("ticket_score"), "error": "", "mismatch": mismatch,
+                "drafts": data.get("draft_results") or [], "retrieved": data.get("retrieved_results") or {}}
     except Exception as e:
         return failed(ticket_id, label, f"bad response shape ({type(e).__name__}: {e})")
 
@@ -80,6 +81,81 @@ def short(route):
 def normalise(reason):
     reason = re.sub(r"^issue \d+: ", "", reason)
     return re.sub(r"\d+\.\d+", "X", reason)
+
+
+def print_draft_health(all_runs):
+    total = 0
+    blanked = 0
+    for run in all_runs:
+        for r in run:
+            for d in r["drafts"]:
+                total += 1
+                note = d.get("uncovered_aspects") or ""
+                if "did not exactly match" in note or "failed validation" in note or "no valid citations" in note:
+                    blanked += 1
+    empty = sum(1 for run in all_runs for r in run for d in r["drafts"] if not (d.get("draft_text") or "").strip())
+    print("\n" + "=" * 70)
+    print("DRAFT HEALTH")
+    print("=" * 70)
+    print(f"Issue drafts in total: {total}")
+    print(f"Drafts with empty text: {empty}")
+    print(f"Drafts blanked by the drafter's own citation validation: {blanked}")
+
+
+def print_empty_answerable_drafts(all_runs):
+    print("\n" + "=" * 70)
+    print("EMPTY DRAFTS ON ANSWERABLE TICKETS (run 1): what the drafter said was missing")
+    print("=" * 70)
+    shown = 0
+    for r in all_runs[0]:
+        if r["label"] != "answerable":
+            continue
+        for d in r["drafts"]:
+            if (d.get("draft_text") or "").strip():
+                continue
+            print(f"{r['ticket']} issue {d.get('issue_id')} [{d.get('grounding_status')}]: {(d.get('uncovered_aspects') or '')[:300]}")
+            shown += 1
+    if shown == 0:
+        print("None.")
+
+
+def print_failures(all_runs):
+    failed_rows = [r for run in all_runs for r in run if r["route"] == "FAILED"]
+    if not failed_rows:
+        return
+    print("\n" + "=" * 70)
+    print("FAILED REQUESTS (look for these timestamps in the server log)")
+    print("=" * 70)
+    for r in failed_rows:
+        print(f"{r['ticket']}: {r['error'][:160]}")
+
+
+def print_citation_detail(all_runs):
+    print("\n" + "=" * 70)
+    print("CITATION MISMATCH DETAIL (run 1 only)")
+    print("=" * 70)
+    shown = 0
+    for r in all_runs[0]:
+        if not any("not retrieved" in reason for reason in r["reasons"]):
+            continue
+        print(f"{r['ticket']}:")
+        all_ids = {c["chunk_id"] for chunks in r["retrieved"].values() for c in chunks}
+        for d in r["drafts"]:
+            key = str(d["issue_id"])
+            here = {c["chunk_id"] for c in r["retrieved"].get(key, [])}
+            for cited in d.get("citations", []):
+                if cited in here:
+                    verdict = "ok, in this issue's retrieved list"
+                elif cited in all_ids:
+                    others = [k for k, chunks in r["retrieved"].items() if k != key and cited in {c["chunk_id"] for c in chunks}]
+                    verdict = f"real chunk, but only in the retrieved list of issue {others}"
+                else:
+                    near = [x for x in all_ids if x[:8] == cited[:8]]
+                    verdict = f"looks like a corrupted copy of {near[0]}" if near else "matches no retrieved chunk at all"
+                print(f"  issue {key}: cited {cited}  ->  {verdict}")
+        shown += 1
+    if shown == 0:
+        print("No ticket had a citation that was missing from the retrieved lists in run 1.")
 
 
 async def main():
@@ -128,6 +204,11 @@ async def main():
     counts = Counter(normalise(reason) for run in all_runs for r in run for reason in r["reasons"])
     for reason, n in counts.most_common(12):
         print(f"  {n:>3}  {reason}")
+
+    print_draft_health(all_runs)
+    print_failures(all_runs)
+    print_empty_answerable_drafts(all_runs)
+    print_citation_detail(all_runs)
 
     sys.exit(1 if bad or mismatched else 0)
 
